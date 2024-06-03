@@ -14,44 +14,37 @@ const EventList = () => {
   const [isAuth, setIsAuth] = useState(localStorage.getItem("isAuth") === "true");
 
   useEffect(() => {
-    const fetchEventsAndMembers = async () => {
-      // イベントを取得
+    const fetchData = async () => {
+      // イベント一覧を取得
       const eventCollection = collection(db, 'events');
       const eventSnapshot = await getDocs(eventCollection);
       const eventList = eventSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       setEvents(eventList);
 
-      // イベントメンバーを全て取得
+      // イベントメンバー一覧を取得
       const eventMembersCollection = collection(db, 'event_members');
       const eventMembersSnapshot = await getDocs(eventMembersCollection);
       const eventMembersList = eventMembersSnapshot.docs.map((doc) => doc.data());
       setEventMembers(eventMembersList);
-    };
 
-    fetchEventsAndMembers();
-  }, []);
-
-  useEffect(() => {
-    const checkCurrentUser = async () => {
+      // ユーザー情報を取得
       const user = auth.currentUser;
       setCurrentUser(user);
       if (user) {
         const userId = user.uid;
-        
-        // イベントメンバーをフィルタリングして取得
+
+        // ユーザーの参加イベント情報を取得
         const userEventMembers = eventMembers.filter(member => member.memberId === userId);
         const userParticipation = userEventMembers.reduce((acc, member) => {
           acc[member.eventId] = true;
           return acc;
         }, {});
         setUserEventParticipation(userParticipation);
-        
-        // メンバーのデータを取得
-        const allMembersQuery = query(collection(db, 'members'));
+
+        // ユーザーがメンバーかどうかをチェック
+        const allMembersQuery = query(collection(db, 'members'), where('author.id', '==', userId));
         const allMembersSnapshot = await getDocs(allMembersQuery);
         const membersData = allMembersSnapshot.docs.map(doc => doc.data());
-  
-        // フィルタリング
         const filteredMembers = membersData.filter(member => member.author.id === userId);
         if (filteredMembers.length === 0) {
           alert('あなたはメンバー名が未登録です。メンバー登録でお名前を登録してください。');
@@ -59,14 +52,9 @@ const EventList = () => {
         }
       }
     };
-  
-    const unsubscribe = auth.onAuthStateChanged(() => {
-      checkCurrentUser();
-    });
-  
-    return unsubscribe;
-  }, [navigate, eventMembers]);
-  
+
+    fetchData();
+  }, [navigate]);
 
   useEffect(() => {
     const fetchParticipantCounts = () => {
@@ -88,26 +76,39 @@ const EventList = () => {
       navigate('/login');
       return;
     }
-
+  
     const eventRef = doc(db, 'events', eventId);
     await updateDoc(eventRef, {
       participants: arrayUnion(currentUser.uid)
     });
-
+  
+    // ユーザーのアカウント名を取得
+    const userQuery = query(collection(db, 'members'), where('author.id', '==', currentUser.uid));
+    const userSnapshot = await getDocs(userQuery);
+    if (userSnapshot.empty) {
+      alert('あなたはメンバー名が未登録です。メンバー登録でお名前を登録してください。');
+      navigate('/member');
+      return;
+    }
+    const userData = userSnapshot.docs[0].data();
+    const accountname = userData.accountname;
+  
+    // イベントメンバーに新しいドキュメントを追加
     await addDoc(collection(db, 'event_members'), {
       eventId: eventId,
-      memberId: currentUser.uid
+      memberId: currentUser.uid,
+      accountname: accountname // accountname を追加
     });
-
+  
     navigate('/confirmation');
   };
+  
 
   const handleDelete = async (id) => {
     console.log("きてtrue" + id);
     await deleteDoc(doc(db, "events", id));
     navigate("/eventedit");
   };
-
 
   return (
     <div className="eventListContainer">
@@ -138,7 +139,7 @@ const EventList = () => {
               <td>{event.court_surface}</td>
               <td>
                 <div className="participantList">
-                  <ParticipantList eventId={event.id} />
+                  <ParticipantList eventId={event.id} eventMembers={eventMembers} navigate={navigate} />
                 </div>
               </td>
               <td>
@@ -164,56 +165,17 @@ const EventList = () => {
   );
 };
 
-/**
- * 参加者リストデータを作成
- *  @param {} param0 
- * @returns 
- */
-const ParticipantList = ({ eventId }) => {
-  const [participantNames, setParticipantNames] = useState([]);
-  const navigate = useNavigate();
-
-  const fetchParticipants = async () => {
-    const eventMembersQuery = query(
-      collection(db, 'event_members'),
-      where('eventId', '==', eventId)
-    );
-    const eventMembersSnapshot = await getDocs(eventMembersQuery);
-    const ids = eventMembersSnapshot.docs.map((doc) => doc.data().memberId);
-/**
- * memberコレクションからアカウント名を取得する
- */
-    const names = await Promise.all(ids.map(async (memberId) => {
-      const membersQuery = query(collection(db, 'members'), where('author.id', '==', memberId));
-      const membersSnapshot = await getDocs(membersQuery);
-       //アカウント登録がされている場合、アカウント名を取得
-      if (!membersSnapshot.empty) {
-        const userDoc = membersSnapshot.docs[0];
-        const userData = userDoc.data();
-        const accountname = userData.accountname;
-        return (
-          //アカウント名のボタンを表示し、クリックするとキャンセル画面に遷移するものとする。
-          <button key={memberId} onClick={() => navigate(`/eventcancel/${eventId}`)} style={{ fontSize: '16px', padding: '1px', marginBottom: '1px', backgroundColor: 'rgb(25, 51, 223)' }}>
-            {accountname}
-          </button>
-        );
-      } else {
-        alert('あなたはメンバー名が未登録です。メンバー登録でお名前を登録してください。');
-        navigate('/member');
-      }
-    }));
-
-    setParticipantNames(names);
-  };
-
-  //イベントが変わるたびに参加者情報を更新
-  useEffect(() => {
-    fetchParticipants();
-  }, [eventId]);
+const ParticipantList = ({ eventId, eventMembers, navigate }) => {
+  const filteredMembers = eventMembers.filter(member => member.eventId === eventId);
+  const participantButtons = filteredMembers.map(member => (
+    <button key={member.memberId} onClick={() => navigate(`/eventcancel/${eventId}`)} style={{ fontSize: '16px', padding: '1px', marginBottom: '1px', backgroundColor: 'rgb(25, 51, 223)' }}>
+      {member.accountname}
+    </button>
+  ));
 
   return (
     <div>
-      {participantNames}
+      {participantButtons}
     </div>
   );
 };

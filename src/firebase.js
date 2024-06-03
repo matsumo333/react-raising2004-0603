@@ -3,14 +3,13 @@ import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBK2pPxo1UvJ4qA31qJgC2Rnf0q6JOgS4k",
-  authDomain: "raising2004-160b9.firebaseapp.com",
-  databaseURL: "https://raising2004-160b9-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "raising2004-160b9",
-  storageBucket: "raising2004-160b9.appspot.com",
-  messagingSenderId: "1059702426042",
-  appId: "1:1059702426042:web:7739e8f1a9343e171df583",
-  measurementId: "G-435KSNG1S2"
+  apiKey: "AIzaSyCB-Ys7PmqGs0EsuUMHaa03NhqdrtRK7JA",
+  authDomain: "raising-backup.firebaseapp.com",
+  projectId: "raising-backup",
+  storageBucket: "raising-backup.appspot.com",
+  messagingSenderId: "1035921603739",
+  appId: "1:1035921603739:web:4d157dc29529271855da3e",
+  measurementId: "G-C0WXV48S7G"
 };
 
 const app = initializeApp(firebaseConfig);

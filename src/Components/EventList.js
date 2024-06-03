@@ -37,15 +37,23 @@ const EventList = () => {
       setCurrentUser(user);
       if (user) {
         const userId = user.uid;
+        
+        // イベントメンバーをフィルタリングして取得
         const userEventMembers = eventMembers.filter(member => member.memberId === userId);
         const userParticipation = userEventMembers.reduce((acc, member) => {
           acc[member.eventId] = true;
           return acc;
         }, {});
         setUserEventParticipation(userParticipation);
-        const membersQuery = query(collection(db, 'members'), where('author.id', '==', userId));
-        const membersSnapshot = await getDocs(membersQuery);
-        if (membersSnapshot.empty) {
+        
+        // メンバーのデータを取得
+        const allMembersQuery = query(collection(db, 'members'));
+        const allMembersSnapshot = await getDocs(allMembersQuery);
+        const membersData = allMembersSnapshot.docs.map(doc => doc.data());
+  
+        // フィルタリング
+        const filteredMembers = membersData.filter(member => member.author.id === userId);
+        if (filteredMembers.length === 0) {
           alert('あなたはメンバー名が未登録です。メンバー登録でお名前を登録してください。');
           navigate('/member');
         }

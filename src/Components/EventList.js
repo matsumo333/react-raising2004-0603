@@ -7,123 +7,80 @@ import { Link, useNavigate } from 'react-router-dom';
 const EventList = () => {
   const [events, setEvents] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
+  const [eventMembers, setEventMembers] = useState([]);
   const [userEventParticipation, setUserEventParticipation] = useState({});
   const [participantCounts, setParticipantCounts] = useState({});
   const navigate = useNavigate();
   const [isAuth, setIsAuth] = useState(localStorage.getItem("isAuth") === "true");
 
-  /**
-   * 初回レンダリングなど？にイベントのリストをデータベースから取得する 
-   * 
-   */
-
   useEffect(() => {
-    const fetchEvents = async () => {
+    const fetchEventsAndMembers = async () => {
+      // イベントを取得
       const eventCollection = collection(db, 'events');
       const eventSnapshot = await getDocs(eventCollection);
       const eventList = eventSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       setEvents(eventList);
+
+      // イベントメンバーを全て取得
+      const eventMembersCollection = collection(db, 'event_members');
+      const eventMembersSnapshot = await getDocs(eventMembersCollection);
+      const eventMembersList = eventMembersSnapshot.docs.map((doc) => doc.data());
+      setEventMembers(eventMembersList);
     };
 
-    fetchEvents();
+    fetchEventsAndMembers();
   }, []);
 
-  /**
-   * navigateが実行するたびに、参加者の氏名や参加人数が取得する
-   */
-
   useEffect(() => {
-
-   /**
-    * イベントの応じた参加者情報を取得する
-    * @param {} userId 
-    * 参加者情報を排出
-    */
-    const fetchUserEventParticipation = async (userId) => {
-      const eventMembersQuery = query(
-        collection(db, 'event_members'),
-        where('memberId', '==', userId)
-      );
-      const eventMembersSnapshot = await getDocs(eventMembersQuery);
-      const userParticipation = eventMembersSnapshot.docs.reduce((acc, doc) => {
-        acc[doc.data().eventId] = true;
-        return acc;
-      }, {});
-      setUserEventParticipation(userParticipation);
-    };
-
-     /**
-     * メンバ名が未登録の場合、登録を促す
-     * @param {*} userId 
-    */
-    const checkMemberRegistration = async (userId) => {
-      const membersQuery = query(collection(db, 'members'), where('author.id', '==', userId));
-      const membersSnapshot = await getDocs(membersQuery);
-      if (membersSnapshot.empty) {
-        alert('あなたはメンバー名が未登録です。メンバー登録でお名前を登録してください。');
-        navigate('/member');
-      }
-    };
-
-    /** ユーザーの情報が変更されると？？？？承認状態の変更があった場合、必要な情報を取得する。
-     *  
-     * 
-     */
-
-    const unsubscribe = auth.onAuthStateChanged((user) => {
+    const checkCurrentUser = async () => {
+      const user = auth.currentUser;
       setCurrentUser(user);
       if (user) {
-        fetchUserEventParticipation(user.uid);
-        checkMemberRegistration(user.uid);
-      }
-    });
-
-    return unsubscribe;
-  }, [navigate]);
-
-  /**
-   * 
-   * 
-   */
-  useEffect(() => {
-    const fetchParticipantCounts = async () => {
-      if (events.length > 0) {
-        const counts = {};
-        for (const event of events) {
-          const eventMembersQuery = query(
-            collection(db, 'event_members'),
-            where('eventId', '==', event.id)
-          );
-          const eventMembersSnapshot = await getDocs(eventMembersQuery);
-          counts[event.id] = eventMembersSnapshot.size;
+        const userId = user.uid;
+        const userEventMembers = eventMembers.filter(member => member.memberId === userId);
+        const userParticipation = userEventMembers.reduce((acc, member) => {
+          acc[member.eventId] = true;
+          return acc;
+        }, {});
+        setUserEventParticipation(userParticipation);
+        const membersQuery = query(collection(db, 'members'), where('author.id', '==', userId));
+        const membersSnapshot = await getDocs(membersQuery);
+        if (membersSnapshot.empty) {
+          alert('あなたはメンバー名が未登録です。メンバー登録でお名前を登録してください。');
+          navigate('/member');
         }
-        setParticipantCounts(counts);
       }
+    };
+  
+    const unsubscribe = auth.onAuthStateChanged(() => {
+      checkCurrentUser();
+    });
+  
+    return unsubscribe;
+  }, [navigate, eventMembers]);
+  
+
+  useEffect(() => {
+    const fetchParticipantCounts = () => {
+      const counts = events.reduce((acc, event) => {
+        const participants = eventMembers.filter(member => member.eventId === event.id);
+        acc[event.id] = participants.length;
+        return acc;
+      }, {});
+      setParticipantCounts(counts);
     };
 
     fetchParticipantCounts();
-  }, [events]);
+  }, [events, eventMembers]);
 
-/**
- * ログインするとき、
- * @param {*} eventId 
- * @returns 
- */
   const handleJoinEvent = async (eventId) => {
-
- /**
- * ログインしていない時、ログイン画面に遷移する
- * 
- */
     if (!currentUser) {
       console.log('User is not logged in');
       alert('ログインしてください');
       navigate('/login');
       return;
     }
-/**
- * イベントを追加する
- */
+
     const eventRef = doc(db, 'events', eventId);
     await updateDoc(eventRef, {
       participants: arrayUnion(currentUser.uid)
@@ -142,6 +99,7 @@ const EventList = () => {
     await deleteDoc(doc(db, "events", id));
     navigate("/eventedit");
   };
+
 
   return (
     <div className="eventListContainer">

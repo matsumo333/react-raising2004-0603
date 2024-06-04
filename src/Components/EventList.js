@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, updateDoc, doc, arrayUnion, addDoc, query, where, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, updateDoc, doc, arrayUnion, addDoc, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import './EventList.scss';
 import { Link, useNavigate } from 'react-router-dom';
@@ -8,6 +8,7 @@ const EventList = () => {
   const [events, setEvents] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [eventMembers, setEventMembers] = useState([]);
+  const [members, setMembers] = useState([]);
   const [userEventParticipation, setUserEventParticipation] = useState({});
   const [participantCounts, setParticipantCounts] = useState({});
   const navigate = useNavigate();
@@ -27,6 +28,12 @@ const EventList = () => {
       const eventMembersList = eventMembersSnapshot.docs.map((doc) => doc.data());
       setEventMembers(eventMembersList);
 
+      // イベントメンバー一覧を取得
+      const membersCollection = collection(db, 'members');
+      const membersSnapshot = await getDocs(membersCollection);
+      const membersList = membersSnapshot.docs.map((doc) => doc.data());
+      setMembers(membersList);
+
       // ユーザー情報を取得
       const user = auth.currentUser;
       setCurrentUser(user);
@@ -42,10 +49,7 @@ const EventList = () => {
         setUserEventParticipation(userParticipation);
 
         // ユーザーがメンバーかどうかをチェック
-        const allMembersQuery = query(collection(db, 'members'), where('author.id', '==', userId));
-        const allMembersSnapshot = await getDocs(allMembersQuery);
-        const membersData = allMembersSnapshot.docs.map(doc => doc.data());
-        const filteredMembers = membersData.filter(member => member.author.id === userId);
+        const filteredMembers = membersList.filter(member => member.author.id === userId);
         if (filteredMembers.length === 0) {
           alert('あなたはメンバー名が未登録です。メンバー登録でお名前を登録してください。');
           navigate('/member');
@@ -83,15 +87,13 @@ const EventList = () => {
     });
   
     // ユーザーのアカウント名を取得
-    const userQuery = query(collection(db, 'members'), where('author.id', '==', currentUser.uid));
-    const userSnapshot = await getDocs(userQuery);
-    if (userSnapshot.empty) {
+    const user = members.find(member => member.author.id === currentUser.uid);
+    if (!user) {
       alert('あなたはメンバー名が未登録です。メンバー登録でお名前を登録してください。');
       navigate('/member');
       return;
     }
-    const userData = userSnapshot.docs[0].data();
-    const accountname = userData.accountname;
+    const accountname = user.accountname;
   
     // イベントメンバーに新しいドキュメントを追加
     await addDoc(collection(db, 'event_members'), {
@@ -168,16 +170,11 @@ const EventList = () => {
 const ParticipantList = ({ eventId, eventMembers, navigate }) => {
   const filteredMembers = eventMembers.filter(member => member.eventId === eventId);
   const participantButtons = filteredMembers.map(member => (
-    <button key={member.memberId} onClick={() => navigate(`/eventcancel/${eventId}`)} style={{ fontSize: '16px', padding: '1px', marginBottom: '1px', backgroundColor: 'rgb(25, 51, 223)' }}>
+    <button key={member.memberId} onClick={() => navigate(`/eventcancel/${eventId}`)} style={{ fontSize: '14px', padding: '2px 12px' ,marginBottom:'2px'}}>
       {member.accountname}
     </button>
   ));
-
-  return (
-    <div>
-      {participantButtons}
-    </div>
-  );
+  return <div className="participant-list">{participantButtons}</div>;
 };
 
 export default EventList;

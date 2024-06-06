@@ -101,8 +101,15 @@ const EventList = () => {
       memberId: currentUser.uid,
       accountname: accountname // accountname を追加
     });
-  
-    navigate('/confirmation');
+     // ローカルのステートを更新
+     setEventMembers(prevEventMembers => [...prevEventMembers, { eventId, memberId: currentUser.uid, accountname }]);
+
+     // ユーザーの参加状況を更新
+     setUserEventParticipation(prevParticipation => ({
+       ...prevParticipation,
+       [eventId]: true
+     }));
+    // navigate('/confirmation');
   };
   
 
